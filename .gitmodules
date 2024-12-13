@@ -1,3 +1,7 @@
 [submodule "profile_clean/arrest_ingest"]
 	path = profile_clean/arrest_ingest
 	url = https://github.com/RBDA-Group-7-Final/NYPD-Arrest-Data-Profile-Clean.git
+
+[submodule "profile_clean/Civilian_Complaint_Review_Board__Complaints_Against_Police_Officers"]
+	path = profile_clean/Civilian_Complaint_Review_Board__Complaints_Against_Police_Officers
+	url = https://github.com/RBDA-Group-7-Final/Civilian_Complaint_Review_Board__Complaints_Against_Police_Officers
