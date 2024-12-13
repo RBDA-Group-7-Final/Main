@@ -1,0 +1,25 @@
+# Create directories
+hadoop fs -mkdir /nypd_data
+hadoop fs -mkdir /nypd_data/raw
+hadoop fs -mkdir /nypd_data/cleaned
+
+# Upload data
+hadoop fs -put NYPD_Complaint_Data_Historic.csv /nypd_data/raw/
+
+
+javac -cp $(hadoop classpath) *.java
+jar cf nypd_analyzer.jar *.class
+
+
+# Run data profiling
+hadoop jar nypd_analyzer.jar dataprofiler \
+    /nypd_data/raw/NYPD_Complaint_Data_Historic.csv \
+    /nypd_data/profiling_output
+
+# Run data cleaning
+hadoop jar nypd_analyzer.jar datacleaner \
+    /nypd_data/raw/NYPD_Complaint_Data_Historic.csv \
+    /nypd_data/cleaned/cleaned_data
+
+
+
