@@ -1,0 +1,3 @@
+[submodule "profile_clean/arrest_ingest"]
+	path = profile_clean/arrest_ingest
+	url = https://github.com/RBDA-Group-7-Final/NYPD-Arrest-Data-Profile-Clean.git

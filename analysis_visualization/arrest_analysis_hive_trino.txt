@@ -1,0 +1,106 @@
+# connect to hive
+beeline -u jdbc:hive2://localhost:10000
+set hive.execution.engine=mr;
+set hive.fetch.task.conversion=minimal;
+use yx3494_nyu_edu;
+
+## ----------------- Hive ----------------- ##
+
+# create tables
+CREATE EXTERNAL TABLE nypd_arrests (arrest_date string,month int,year int,tags string,category string, offense_level string, borough string, age_group string, sex string, race string, x_coord bigint, y_coord bigint,latitude double,longitude double) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde' LOCATION '/user/yx3494_nyu_edu/nypd_data/arrests_cleaned' TBLPROPERTIES ("skip.header.line.count"="1", "separatorChar" = ",", "quoteChar" = "\"");
+
+## ----------------- Trino ----------------- ##
+# create analysis view
+# analysis by borough (name, count, percentage(2))
+CREATE OR REPLACE VIEW arrests_by_borough AS SELECT borough, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY borough ORDER BY count DESC;
+SELECT * FROM arrests_by_borough;
+
+# analysis by offense level
+CREATE OR REPLACE VIEW arrests_by_offense_level AS SELECT offense_level, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY offense_level ORDER BY count DESC;
+SELECT * FROM arrests_by_offense_level;
+
+# analysis by age group
+CREATE OR REPLACE VIEW arrests_by_age_group AS SELECT age_group, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY age_group ORDER BY count DESC;
+SELECT * FROM arrests_by_age_group;
+
+# analysis by month
+CREATE OR REPLACE VIEW arrests_by_month AS SELECT month, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY month ORDER BY count DESC;
+SELECT * FROM arrests_by_month;
+
+# analysis by year
+CREATE OR REPLACE VIEW arrests_by_year AS SELECT year, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY year ORDER BY count DESC;
+SELECT * FROM arrests_by_year;
+
+# analysis by sex
+CREATE OR REPLACE VIEW arrests_by_sex AS SELECT sex, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY sex ORDER BY count DESC;
+SELECT * FROM arrests_by_sex;
+
+# analysis by race
+CREATE OR REPLACE VIEW arrests_by_race AS SELECT race, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY race ORDER BY count DESC;
+SELECT * FROM arrests_by_race;
+
+# analysis by category
+CREATE OR REPLACE VIEW arrests_by_category AS SELECT category, COUNT(*) as count, ROUND(COUNT(*) * 100.0 /SUM(COUNT(*)) OVER(), 2) as percentage FROM nypd_arrests GROUP BY category ORDER BY count DESC;
+SELECT * FROM arrests_by_category;
+
+# analysis by category and age group (category, age_group, count)
+CREATE OR REPLACE VIEW arrests_by_category_age_group AS SELECT category, age_group, COUNT(*) as count FROM nypd_arrests GROUP BY category, age_group;
+
+SELECT * FROM arrests_by_category_age_group where age_group = '25-44' ORDER BY count DESC limit 5;
+SELECT * FROM arrests_by_category_age_group where age_group = '18-24' ORDER BY count DESC limit 5;
+SELECT * FROM arrests_by_category_age_group where age_group = '45-64' ORDER BY count DESC limit 5;
+SELECT * FROM arrests_by_category_age_group where age_group = '65+' ORDER BY count DESC limit 5;
+SELECT * FROM arrests_by_category_age_group where age_group = '<18' ORDER BY count DESC limit 5;
+
+# each year the top 5 categories of arrests
+CREATE OR REPLACE VIEW arrests_by_year_category AS SELECT year, category, COUNT(*) as count FROM nypd_arrests GROUP BY year, category;
+
+# pivot the year column
+SELECT year, category, count FROM (SELECT year, category, count, ROW_NUMBER() OVER(PARTITION BY year ORDER BY count DESC) as rn FROM arrests_by_year_category) t WHERE rn <= 5 ORDER BY year, count DESC;
+
+# shooting incidents table(outside)
+CREATE OR REPLACE VIEW shooting_incidents AS SELECT CAST(date_format(date_parse(occur_date, '%m/%d/%Y'), '%Y') AS VARCHAR) AS year, CAST(date_format(date_parse(occur_date, '%m/%d/%Y'), '%m') AS INTEGER) AS month, boro as borough, vic_age_group, vic_race, statistical_murder_flag as murder, latitude, longitude FROM ym3143_nyu_edu.incidents;
+SELECT * from shooting_incidents limit 5;
+
+# civilian complaints(outside)
+CREATE OR REPLACE VIEW civilian_complaints AS SELECT CAST(date_format(date_parse(incident_time, '%m/%d/%Y %H'), '%Y') AS VARCHAR) AS year, CAST(date_format(date_parse(incident_time, '%m/%d/%Y %H'), '%m') AS INTEGER) AS month, borough, location_type, contact_reason, outcome, dispotion FROM rm5327_nyu_edu.complaints;
+SELECT * from civilian_complaints limit 5;
+
+# Correlations arrests vs. civilian complaint
+CREATE OR REPLACE VIEW yearly_borough_arrests AS
+SELECT CAST(year AS VARCHAR) as year, borough, COUNT(*) as arrest_count
+FROM nypd_arrests
+GROUP BY year, borough;
+
+CREATE OR REPLACE VIEW yearly_borough_complaints AS
+SELECT CAST(year AS VARCHAR) as year, borough, COUNT(*) as complaint_count
+FROM civilian_complaints
+GROUP BY year, borough;
+
+CREATE OR REPLACE VIEW correlation_data AS
+SELECT 
+    a.year,
+    a.borough,
+    a.arrest_count,
+    COALESCE(c.complaint_count, 0) as complaint_count
+FROM yearly_borough_arrests a
+LEFT JOIN yearly_borough_complaints c
+    ON a.year = c.year AND UPPER(a.borough) = UPPER(c.borough);
+
+WITH res AS (
+    SELECT 
+        borough,
+        CORR(arrest_count, complaint_count) as arrest_complaint_corr,
+        AVG(arrest_count) as avg_arrests,
+        AVG(complaint_count) as avg_complaints
+    FROM correlation_data
+    GROUP BY borough
+)
+SELECT 
+    borough,
+    ROUND(arrest_complaint_corr, 3) as "Arrest vs. Civilian Complaints Correlation",
+    CAST(avg_arrests as INTEGER) as "Avg. Arrests",
+    CAST(avg_complaints as INTEGER) as "Avg. Civilian Complaints"
+FROM res
+WHERE borough != 'unknown'
+ORDER BY borough;
