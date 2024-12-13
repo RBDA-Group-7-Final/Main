@@ -5,3 +5,7 @@
 [submodule "profile_clean/Civilian_Complaint_Review_Board__Complaints_Against_Police_Officers"]
 	path = profile_clean/Civilian_Complaint_Review_Board__Complaints_Against_Police_Officers
 	url = https://github.com/RBDA-Group-7-Final/Civilian_Complaint_Review_Board__Complaints_Against_Police_Officers
+
+[submodule "profile_clean/nypd-shooting-analysis"]
+	path = profile_clean/nypd-shooting-analysis
+	url = https://github.com/RBDA-Group-7-Final/nypd-shooting-analysis
